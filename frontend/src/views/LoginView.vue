@@ -1,90 +1,96 @@
+<!-- frontend/src/views/LoginView.vue -->
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100 px-4">
-    <div class="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/70 p-8 shadow-xl shadow-slate-950/40">
-      <h1 class="text-xl font-semibold mb-6 text-center">Sign in to Exchange</h1>
+  <div class="min-h-screen flex items-center justify-center bg-slate-900">
+    <div class="w-full max-w-md bg-slate-800/80 p-8 rounded-2xl shadow-xl border border-slate-700">
+      <h1 class="text-2xl font-semibold text-white mb-6 text-center">
+        Login
+      </h1>
 
-      <form @submit.prevent="submit">
-        <div class="mb-4">
-          <label class="block text-xs font-medium text-slate-400 mb-1">Email</label>
+      <form @submit.prevent="handleLogin" class="space-y-4">
+        <div>
+          <label class="block text-sm text-slate-300 mb-1">Email</label>
           <input
             v-model="email"
             type="email"
             required
-            autocomplete="email"
-            class="block w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="you@example.com"
+            class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 focus:outline-none focus:ring focus:ring-indigo-500"
           />
         </div>
 
-        <div class="mb-4">
-          <label class="block text-xs font-medium text-slate-400 mb-1">Password</label>
+        <div>
+          <label class="block text-sm text-slate-300 mb-1">Password</label>
           <input
             v-model="password"
             type="password"
             required
-            autocomplete="current-password"
-            class="block w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="••••••••"
+            class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 focus:outline-none focus:ring focus:ring-indigo-500"
           />
         </div>
 
-        <p v-if="error" class="mb-3 text-xs text-rose-400">
+        <p v-if="error" class="text-sm text-red-400">
           {{ error }}
         </p>
 
         <button
           type="submit"
-          class="mt-1 inline-flex w-full items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/40 hover:bg-blue-500 disabled:opacity-60"
-          :disabled="submitting"
+          :disabled="loading"
+          class="w-full py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white font-medium transition"
         >
-          <span v-if="!submitting">Sign in</span>
-          <span v-else>Signing in…</span>
+          {{ loading ? 'Logging in...' : 'Login' }}
         </button>
       </form>
 
-      <p class="mt-4 text-xs text-slate-400 text-center">
-        Don't have an account?
-        <RouterLink to="/register" class="text-blue-400 hover:text-blue-300">
+      <p class="mt-4 text-center text-slate-400 text-sm">
+        Don’t have an account?
+        <router-link to="/register" class="text-indigo-400 hover:text-indigo-300">
           Register
-        </RouterLink>
+        </router-link>
       </p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import api,{ webapi } from '../lib/http'
+import { ref } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
+import api, { setAuthToken } from '../lib/http';
 
+const router = useRouter();
+const route = useRoute();
 
-const router = useRouter()
+const email = ref('');
+const password = ref('');
+const loading = ref(false);
+const error = ref('');
 
-const email = ref('')
-const password = ref('')
-const submitting = ref(false)
-const error = ref('')
-
-const submit = async () => {
-  error.value = ''
-  submitting.value = true
+const handleLogin = async () => {
+  loading.value = true;
+  error.value = '';
 
   try {
-    // Sanctum CSRF cookie
-    await webapi.get('/sanctum/csrf-cookie')
-
-    await api.post('/login', {
+    // ✅ Token-based Sanctum auth (no csrf-cookie needed)
+    const { data } = await api.post('/login', {
       email: email.value,
       password: password.value,
-    })
+    });
 
-    router.push({ name: 'dashboard' })
+    // Expecting: { token: '...', user: { ... } }
+    if (!data.token) {
+      throw new Error('No token returned from API');
+    }
+
+    localStorage.setItem('auth_token', data.token);
+    setAuthToken(data.token);
+
+    // Redirect to originally requested route if exists
+    const redirect = route.query.redirect || '/dashboard';
+    router.push(redirect);
   } catch (e) {
-    console.error(e)
+    console.error(e);
     error.value =
-      e?.response?.data?.message || 'Invalid credentials or login failed.'
+      e.response?.data?.message || 'Login failed. Please check your credentials.';
   } finally {
-    submitting.value = false
+    loading.value = false;
   }
-}
+};
 </script>
