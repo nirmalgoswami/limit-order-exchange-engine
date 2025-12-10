@@ -31,8 +31,25 @@ const myOrders = ref([]);
 const errorMessage = ref('');
 const successMessage = ref('');
 
-let privateUserChannel = null;
-let testChannel = null;
+/**
+ * FORMATTERS
+ * ----------
+ * USD: 9432.50
+ * Crypto: up to 8 decimals, trimmed (e.g. 0.5, 0.5001, 0.00000001)
+ */
+const formatUsd = (value) => {
+  const n = Number(value ?? 0);
+  if (Number.isNaN(n)) return '0.00';
+  return n.toFixed(2);
+};
+
+const formatCrypto = (value) => {
+  const n = Number(value ?? 0);
+  if (Number.isNaN(n)) return '0';
+  let s = n.toFixed(8);        // "1000.00000000"
+  s = s.replace(/\.?0+$/, ''); // "1000"
+  return s;
+};
 
 const quoteVolume = computed(() => {
   const p = parseFloat(price.value || '0');
@@ -152,7 +169,6 @@ async function placeOrder() {
 async function cancelOrder(orderId) {
   errorMessage.value = '';
   successMessage.value = '';
-
   try {
     await api.post(`/orders/${orderId}/cancel`);
     successMessage.value = 'Order cancelled.';
@@ -184,6 +200,7 @@ async function logout() {
   }
 }
 
+let privateUserChannel = null;
 
 function setupEchoListeners() {
   if (!echo) {
@@ -196,33 +213,27 @@ function setupEchoListeners() {
     cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER,
   });
 
-  // log when pusher connects
   if (echo.connector?.pusher?.connection) {
     echo.connector.pusher.connection.bind('connected', () => {
-      //console.log('Pusher connected');
+      // console.log('Pusher connected');
     });
   }
 
-  // 2) Private user channel for OrderMatched
   if (!user.value?.id) {
     return;
   }
 
   const channelName = `user.${user.value.id}`;
-  //console.log('Subscribing to private channel:', channelName);
 
   if (!privateUserChannel) {
     privateUserChannel = echo
       .private(channelName)
       .subscribed(() => {
-        //console.log('Subscribed to', channelName);
+        // console.log('Subscribed to', channelName);
       })
-      
       .listen('.OrderMatched', async (event) => {
-        //console.log('OrderMatched event received:', event);
-        
+        // console.log('OrderMatched event received:', event);
 
-        // refresh UI
         await Promise.all([
           fetchProfile(),
           fetchOrderBook(),
@@ -246,7 +257,6 @@ onMounted(async () => {
     fetchOrderBook(),
     fetchMyOrders(),
   ]);
-
   setupEchoListeners();
 });
 
@@ -261,7 +271,6 @@ watch(user, (newUser) => {
   }
 });
 </script>
-
 
 <template>
   <div class="min-h-screen bg-slate-950 text-slate-100">
@@ -282,7 +291,7 @@ watch(user, (newUser) => {
               {{ user?.name || user?.email || 'User' }}
             </div>
             <div class="text-slate-400">
-              USD: {{ Number(profile.usd_balance || 0).toFixed(2) }}
+              USD: {{ formatUsd(profile.usd_balance) }}
             </div>
           </div>
           <button
@@ -321,7 +330,7 @@ watch(user, (newUser) => {
               <div class="flex justify-between">
                 <span class="text-slate-400">USD Balance</span>
                 <span class="font-semibold">
-                  {{ Number(profile.usd_balance || 0).toFixed(2) }}
+                  {{ formatUsd(profile.usd_balance) }}
                 </span>
               </div>
             </div>
@@ -339,12 +348,12 @@ watch(user, (newUser) => {
                   <div class="flex flex-col">
                     <span class="font-semibold">{{ asset.symbol }}</span>
                     <span class="text-[11px] text-slate-400">
-                      Available: {{ asset.amount }}
+                      Available: {{ formatCrypto(asset.amount) }}
                     </span>
                   </div>
                   <div class="text-right">
                     <div class="text-[11px] text-slate-400">
-                      Locked: {{ asset.locked_amount }}
+                      Locked: {{ formatCrypto(asset.locked_amount) }}
                     </div>
                   </div>
                 </div>
@@ -481,9 +490,9 @@ watch(user, (newUser) => {
                       class="flex justify-between text-[11px] text-slate-200"
                     >
                       <span class="text-rose-300">
-                        {{ o.price }}
+                        {{ formatUsd(o.price) }}
                       </span>
-                      <span>{{ o.amount }}</span>
+                      <span>{{ formatCrypto(o.amount) }}</span>
                     </div>
                     <p v-if="!orderBook.sells.length" class="text-slate-500">
                       No sell orders.
@@ -507,9 +516,9 @@ watch(user, (newUser) => {
                       class="flex justify-between text-[11px] text-slate-200"
                     >
                       <span class="text-emerald-300">
-                        {{ o.price }}
+                        {{ formatUsd(o.price) }}
                       </span>
-                      <span>{{ o.amount }}</span>
+                      <span>{{ formatCrypto(o.amount) }}</span>
                     </div>
                     <p v-if="!orderBook.buys.length" class="text-slate-500">
                       No buy orders.
@@ -559,10 +568,10 @@ watch(user, (newUser) => {
                         {{ o.symbol }}
                       </td>
                       <td class="py-1.5 text-right">
-                        {{ o.price }}
+                        {{ formatUsd(o.price) }}
                       </td>
                       <td class="py-1.5 text-right">
-                        {{ o.amount }}
+                        {{ formatCrypto(o.amount) }}
                       </td>
                       <td class="py-1.5 text-center">
                         <span
