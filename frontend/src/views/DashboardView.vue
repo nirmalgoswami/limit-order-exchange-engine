@@ -1,7 +1,8 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import api, { setAuthToken } from '../lib/http'; // uses the axios instance with Bearer token :contentReference[oaicite:0]{index=0}
+import api, { setAuthToken } from '../lib/http';
+import { echo } from '../lib/echo';
 
 const router = useRouter();
 const route = useRoute();
@@ -30,6 +31,9 @@ const myOrders = ref([]);
 const errorMessage = ref('');
 const successMessage = ref('');
 
+let privateUserChannel = null;
+let testChannel = null;
+
 const quoteVolume = computed(() => {
   const p = parseFloat(price.value || '0');
   const a = parseFloat(amount.value || '0');
@@ -39,7 +43,6 @@ const quoteVolume = computed(() => {
 
 function handleAuthError(err) {
   if (err.response && err.response.status === 401) {
-    // Token invalid/expired → force logout
     localStorage.removeItem('auth_token');
     setAuthToken(null);
     router.replace({
@@ -63,7 +66,11 @@ async function fetchProfile() {
   try {
     loading.value = true;
     const { data } = await api.get('/profile');
-    profile.value = data;
+
+    profile.value = {
+      usd_balance: Number(data.user?.balance ?? 0),
+      assets: data.assets ?? [],
+    };
   } catch (err) {
     console.error(err);
     handleAuthError(err);
@@ -143,6 +150,9 @@ async function placeOrder() {
 }
 
 async function cancelOrder(orderId) {
+  errorMessage.value = '';
+  successMessage.value = '';
+
   try {
     await api.post(`/orders/${orderId}/cancel`);
     successMessage.value = 'Order cancelled.';
@@ -167,7 +177,6 @@ async function logout() {
     await api.post('/logout');
   } catch (err) {
     console.error(err);
-    // even if API logout fails, clear token on client
   } finally {
     localStorage.removeItem('auth_token');
     setAuthToken(null);
@@ -175,27 +184,59 @@ async function logout() {
   }
 }
 
-// Laravel Echo / Pusher (real-time updates)
-function setupEchoListener() {
-  if (!window.Echo || !user.value?.id) return;
 
-  window.Echo.private(`user.${user.value.id}`)
-    .listen('OrderMatched', async (e) => {
-      // On any match, re-fetch everything to keep UI in sync
-      await Promise.all([
-        fetchProfile(),
-        fetchOrderBook(),
-        fetchMyOrders(),
-      ]);
+function setupEchoListeners() {
+  if (!echo) {
+    console.warn('Echo instance not available');
+    return;
+  }
 
-      // Optional: show a small notification
-      successMessage.value = 'Order matched!';
-      setTimeout(() => {
-        if (successMessage.value === 'Order matched!') {
-          successMessage.value = '';
-        }
-      }, 3000);
+  console.log('Echo / Pusher config (frontend):', {
+    key: import.meta.env.VITE_PUSHER_APP_KEY,
+    cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER,
+  });
+
+  // log when pusher connects
+  if (echo.connector?.pusher?.connection) {
+    echo.connector.pusher.connection.bind('connected', () => {
+      //console.log('Pusher connected');
     });
+  }
+
+  // 2) Private user channel for OrderMatched
+  if (!user.value?.id) {
+    return;
+  }
+
+  const channelName = `user.${user.value.id}`;
+  //console.log('Subscribing to private channel:', channelName);
+
+  if (!privateUserChannel) {
+    privateUserChannel = echo
+      .private(channelName)
+      .subscribed(() => {
+        //console.log('Subscribed to', channelName);
+      })
+      
+      .listen('.OrderMatched', async (event) => {
+        //console.log('OrderMatched event received:', event);
+        
+
+        // refresh UI
+        await Promise.all([
+          fetchProfile(),
+          fetchOrderBook(),
+          fetchMyOrders(),
+        ]);
+
+        successMessage.value = 'Order matched!';
+        setTimeout(() => {
+          if (successMessage.value === 'Order matched!') {
+            successMessage.value = '';
+          }
+        }, 3000);
+      });
+  }
 }
 
 onMounted(async () => {
@@ -205,16 +246,22 @@ onMounted(async () => {
     fetchOrderBook(),
     fetchMyOrders(),
   ]);
-  setupEchoListener();
+
+  setupEchoListeners();
 });
 
 watch(selectedSymbol, () => {
   fetchOrderBook();
 });
-watch(user, () => {
-  setupEchoListener();
+
+// when user gets loaded later, attach private channel then
+watch(user, (newUser) => {
+  if (newUser?.id) {
+    setupEchoListeners();
+  }
 });
 </script>
+
 
 <template>
   <div class="min-h-screen bg-slate-950 text-slate-100">
@@ -223,7 +270,7 @@ watch(user, () => {
       <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
         <div>
           <h1 class="text-lg font-semibold tracking-tight">
-            Limit-Order Exchange
+            Limit Order Exchange
           </h1>
           <p class="text-xs text-slate-400">
             Simple BTC/ETH paper trading engine
