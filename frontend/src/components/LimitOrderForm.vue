@@ -1,130 +1,153 @@
 <script setup>
-import { ref, computed } from 'vue'
-import api from '../lib/http'
+import { ref, computed } from 'vue';
+import api from '../lib/http';
 
-const symbol = ref('BTC')
-const side = ref('buy')
-const price = ref('')
-const amount = ref('')
-const loading = ref(false)
-const error = ref('')
-const success = ref('')
+const props = defineProps({
+  symbol: String,
+  symbols: Array,
+});
 
-const volume = computed(() => {
-  const p = Number(price.value)
-  const a = Number(amount.value)
-  if (!p || !a) return 0
-  return p * a
-})
+const emit = defineEmits(['update:symbol', 'order-placed', 'order-error']);
 
-const submit = async () => {
-  error.value = ''
-  success.value = ''
-  loading.value = true
+const side = ref('buy');
+const price = ref('');
+const amount = ref('');
+const placingOrder = ref(false);
+
+const quoteVolume = computed(() => {
+  const p = parseFloat(price.value || '0');
+  const a = parseFloat(amount.value || '0');
+  if (!p || !a) return '0.00';
+  return (p * a).toFixed(2);
+});
+
+async function placeOrder() {
+  if (!price.value || !amount.value) {
+    emit('order-error', 'Price and amount are required.');
+    return;
+  }
 
   try {
-    await api.post('/orders', {
-      symbol: symbol.value,
+    placingOrder.value = true;
+    const payload = {
+      symbol: props.symbol,
       side: side.value,
       price: price.value,
-      amount: amount.value
-    })
-    success.value = 'Order placed successfully'
-    price.value = ''
-    amount.value = ''
-  } catch (e) {
-    error.value = e.response?.data?.message || 'Failed to place order'
+      amount: amount.value,
+    };
+
+    await api.post('/orders', payload);
+
+    price.value = '';
+    amount.value = '';
+    emit('order-placed');
+  } catch (err) {
+    console.error(err);
+    if (err.response?.data?.message) {
+      emit('order-error', err.response.data.message);
+    } else {
+      emit('order-error', 'Failed to place order.');
+    }
   } finally {
-    loading.value = false
+    placingOrder.value = false;
   }
 }
 </script>
 
 <template>
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow">
-    <form @submit.prevent="submit" class="space-y-4">
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="block text-xs font-medium mb-1 uppercase tracking-wide">Symbol</label>
-          <select
-            v-model="symbol"
-            class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+  <section class="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 space-y-4">
+    <div class="flex items-center justify-between">
+      <h2 class="text-sm font-semibold">
+        Place Limit Order
+      </h2>
+      <div class="flex gap-2 items-center">
+        <label class="text-xs text-slate-400">Symbol</label>
+        <select
+          :value="symbol"
+          class="text-xs rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-sky-500"
+          @change="$emit('update:symbol', $event.target.value)"
+        >
+          <option
+            v-for="s in symbols"
+            :key="s"
+            :value="s"
           >
-            <option value="BTC">BTC</option>
-            <option value="ETH">ETH</option>
-          </select>
-        </div>
+            {{ s }}
+          </option>
+        </select>
+      </div>
+    </div>
 
+    <form class="grid sm:grid-cols-4 gap-3 text-xs" @submit.prevent="placeOrder">
+      <div class="sm:col-span-1 space-y-1.5">
+        <label class="block text-[11px] text-slate-400">Side</label>
+        <div class="grid grid-cols-2 gap-1 bg-slate-950 rounded-lg p-1 border border-slate-700">
+          <button
+            type="button"
+            class="py-1.5 rounded-md text-[11px] font-medium transition"
+            :class="side === 'buy'
+              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/60'
+              : 'text-slate-300'"
+            @click="side = 'buy'"
+          >
+            Buy
+          </button>
+          <button
+            type="button"
+            class="py-1.5 rounded-md text-[11px] font-medium transition"
+            :class="side === 'sell'
+              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/60'
+              : 'text-slate-300'"
+            @click="side = 'sell'"
+          >
+            Sell
+          </button>
+        </div>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="block text-[11px] text-slate-400">Price (USD)</label>
+        <input
+          v-model="price"
+          type="number"
+          step="0.01"
+          min="0"
+          class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-sky-500"
+          placeholder="e.g. 95000"
+        >
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="block text-[11px] text-slate-400">Amount ({{ symbol }})</label>
+        <input
+          v-model="amount"
+          type="number"
+          step="0.0001"
+          min="0"
+          class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-sky-500"
+          placeholder="e.g. 0.01"
+        >
+      </div>
+
+      <div class="space-y-1.5 flex flex-col justify-between">
         <div>
-          <label class="block text-xs font-medium mb-1 uppercase tracking-wide">Side</label>
-          <div class="flex bg-slate-900 border border-slate-700 rounded-lg overflow-hidden text-xs">
-            <button
-              type="button"
-              @click="side = 'buy'"
-              :class="[
-                'flex-1 py-2 text-center',
-                side === 'buy' ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-300'
-              ]"
-            >
-              Buy
-            </button>
-            <button
-              type="button"
-              @click="side = 'sell'"
-              :class="[
-                'flex-1 py-2 text-center',
-                side === 'sell' ? 'bg-rose-600 text-white' : 'bg-slate-900 text-slate-300'
-              ]"
-            >
-              Sell
-            </button>
+          <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+            <span>Volume</span>
+            <span>{{ quoteVolume }} USD</span>
           </div>
+          <p class="text-[11px] text-slate-500">
+            Commission 1.5% applied on match.
+          </p>
         </div>
-      </div>
-
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="block text-xs font-medium mb-1 uppercase tracking-wide">Price (USD)</label>
-          <input
-            v-model="price"
-            type="number"
-            step="0.01"
-            min="0"
-            class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div>
-          <label class="block text-xs font-medium mb-1 uppercase tracking-wide">Amount</label>
-          <input
-            v-model="amount"
-            type="number"
-            step="0.00000001"
-            min="0"
-            class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
-          />
-        </div>
-      </div>
-
-      <div class="text-xs text-slate-400 flex items-center justify-between">
-        <span>Volume preview:</span>
-        <span class="font-mono">
-          {{ volume.toLocaleString(undefined, { maximumFractionDigits: 2 }) }} USD
-        </span>
-      </div>
-
-      <div class="space-y-2">
         <button
           type="submit"
-          :disabled="loading"
-          class="w-full inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold hover:bg-blue-500 disabled:opacity-60"
+          class="mt-2 inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-medium shadow-sm transition border border-sky-500/60 bg-sky-500/20 text-sky-100 hover:bg-sky-500/30 disabled:opacity-60"
+          :disabled="placingOrder"
         >
-          {{ loading ? 'Placing...' : 'Place Order' }}
+          <span v-if="!placingOrder">Place Order</span>
+          <span v-else>Placing…</span>
         </button>
-
-        <p v-if="error" class="text-xs text-rose-400">{{ error }}</p>
-        <p v-if="success" class="text-xs text-emerald-400">{{ success }}</p>
       </div>
     </form>
-  </div>
+  </section>
 </template>
