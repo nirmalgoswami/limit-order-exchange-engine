@@ -1,8 +1,9 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost/test/limit-order-exchange-engine/backend/public/api', // change if needed
+  baseURL: import.meta.env.VITE_BACKEND_URL + '/api',
 });
+
 
 export function setAuthToken(token) {
   if (token) {
@@ -18,7 +19,7 @@ if (token) {
   setAuthToken(token);
 }
 const webapi = axios.create({
-  baseURL: 'http://localhost/test/limit-order-exchange-engine/backend/public', // change if needed
+  baseURL: import.meta.env.VITE_BACKEND_URL, 
 })
 
 export default api;
