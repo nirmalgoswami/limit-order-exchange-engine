@@ -2,6 +2,8 @@
 
 A full-stack cryptocurrency paper trading platform built with Laravel and Vue.js, featuring real-time order matching, balance management, and live updates via Pusher.
 
+![Dashboard](https://i.snipboard.io/eHMOQL.jpg)
+
 ---
 
 
