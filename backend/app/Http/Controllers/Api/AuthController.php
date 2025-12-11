@@ -25,6 +25,21 @@ class AuthController extends Controller
             'balance'  => 10000, // seed some USD for testing
         ]);
 
+        // Give default assets (BTC = 10, ETH = 10) for testing
+        $defaultAssets = [
+            ['symbol' => 'BTC', 'amount' => 10, 'locked_amount' => 0],
+            ['symbol' => 'ETH', 'amount' => 10, 'locked_amount' => 0],
+        ];
+
+        foreach ($defaultAssets as $asset) {
+            \App\Models\Asset::create([
+                'user_id' => $user->id,
+                'symbol' => $asset['symbol'],
+                'amount' => $asset['amount'],
+                'locked_amount' => 0,
+            ]);
+        }
+
         return response()->json($user, 201);
     }
 
