@@ -83,8 +83,12 @@ const handleLogin = async () => {
     setAuthToken(data.token);
 
     // Redirect to originally requested route if exists
-    const redirect = route.query.redirect || '/dashboard';
-    router.push(redirect);
+    //const redirect = route.query.redirect || '/dashboard';
+    //router.push(redirect);
+
+    //Force page reload to ensure session
+    window.location.href = '/dashboard';
+
   } catch (e) {
     console.error(e);
     error.value =
